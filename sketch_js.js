@@ -1,38 +1,46 @@
 let particles = [];
 let attractors = [];
-let attractionStrength = 0.2;
-let particleCount = 200;
+let attractionStrength = 0.01;
+let particleCount = 1000;
 let particleVelocityMin = 1;
-let particleVelocityMax = 3;
-let particleAngleMin = -2.5;
-let particleAngleMax = 2.5;
-let particleAngleVariation = 0.2;
+let particleVelocityMax = 4;
+let particleAngleMin = -8;
+let particleAngleMax = 8;
+let particleAngleVariation = 0.01;
 let particleVelocityVariation = 0.5;
-let zMin = -100;
-let zMax = 100;
+let zMin = -10;
+let zMax = 10;
+let attractorSpeed = 0.5;
+let attractorAngleVariation = 0.01;
+let attractorBoundaryMargin = 50;
+let attractorCircleRadius = 30;
+let particleLimit = 10000;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   colorMode(RGB, 255);
   
-  // Create the attractors with a spread
-  let attractorCount = 6;
-  let attractorSpread = 0.4;
+  // Disable default touch behavior on mobile devices
+  window.addEventListener('touchmove', function(event) {
+    event.preventDefault();
+  }, { passive: false });
   
+  // Create the attractors with random but distributed positions
+  let attractorCount = 5;
   for (let i = 0; i < attractorCount; i++) {
-    let angle = map(i, 0, attractorCount, 0, TWO_PI);
-    let x = width * 0.5 + cos(angle) * width * attractorSpread;
-    let y = height * 0.5 + sin(angle) * height * attractorSpread;
+    let x = random(attractorBoundaryMargin, width - attractorBoundaryMargin);
+    let y = random(attractorBoundaryMargin, height - attractorBoundaryMargin);
     let z = random(zMin, zMax);
-    attractors.push(createVector(x, y, z));
+    let circleCenter = createVector(x, y);
+    attractors.push({ position: createVector(x, y, z), circleCenter: circleCenter, angle: random(TWO_PI) });
   }
 }
 
 function draw() {
   background(200);
   
-  // Create new particles
-  for (let i = 0; i < particleCount; i++) {
+  // Create new particles only if the particle count is below the limit
+  while (particles.length < particleLimit) {
     let angle = random(particleAngleMin, particleAngleMax);
     let velocity = random(particleVelocityMin, particleVelocityMax);
     
@@ -43,7 +51,7 @@ function draw() {
     let vel = p5.Vector.fromAngle(angle);
     vel.mult(velocity);
     let z = random(zMin, zMax);
-    particles.push(new Particle(width * 0.9, height -height, z, vel));
+    particles.push(new Particle(width * 0.5, height * 0.5, z, vel));
   }
   
   for (let particle of particles) {
@@ -53,20 +61,55 @@ function draw() {
   
   // Remove particles that have gone off the screen
   particles = particles.filter(particle => particle.isOnScreen());
+  
+  // Move attractors in small circles around their point of creation
+  for (let attractor of attractors) {
+    let circleCenter = attractor.circleCenter;
+    attractor.angle += attractorAngleVariation;
+    let x = circleCenter.x + cos(attractor.angle) * attractorCircleRadius;
+    let y = circleCenter.y + sin(attractor.angle) * attractorCircleRadius;
+    attractor.position.x = x;
+    attractor.position.y = y;
+  }
+  
+  // Display attractors as dots
+  for (let attractor of attractors) {
+    stroke(255, 0, 0);
+    strokeWeight(3);
+    point(attractor.position.x, attractor.position.y);
+  }
 }
 
 function mouseClicked() {
-  let clickedPoint = createVector(mouseX, mouseY);
+  moveNearestAttractor(mouseX, mouseY);
+}
+
+function touchStarted() {
+  moveNearestAttractor(mouseX, mouseY);
+}
+
+function moveNearestAttractor(x, y) {
+  let clickedPoint = createVector(x, y);
   
-  // Randomly select an attractor to relocate
-  let randomIndex = floor(random(attractors.length));
-  let selectedAttractor = attractors[randomIndex];
+  // Find the nearest attractor
+  let nearestAttractor = null;
+  let minDistance = Infinity;
   
-  // Move the selected attractor to the clicked point
-  selectedAttractor.x = mouseX;
-  selectedAttractor.y = mouseY;
-  // Set the z-coordinate to a random value within the specified range
-  selectedAttractor.z = random(zMin, zMax);
+  for (let attractor of attractors) {
+    let distance = clickedPoint.dist(attractor.position);
+    if (distance < minDistance) {
+      nearestAttractor = attractor;
+      minDistance = distance;
+    }
+  }
+  
+  // Move the nearest attractor to the clicked/touched point and update its circle center
+  if (nearestAttractor) {
+    nearestAttractor.position.x = x;
+    nearestAttractor.position.y = y;
+    nearestAttractor.circleCenter.x = x;
+    nearestAttractor.circleCenter.y = y;
+  }
 }
 
 class Particle {
@@ -79,7 +122,7 @@ class Particle {
   update() {
     // Calculate attraction forces from the attractors
     for (let attractor of attractors) {
-      let force = p5.Vector.sub(attractor, this.pos);
+      let force = p5.Vector.sub(attractor.position, this.pos);
       force.normalize();
       force.mult(attractionStrength);
       this.acc.add(force);
