@@ -14,9 +14,9 @@ let attractorSpeed = 0.5;
 let attractorAngleVariation = 0.01;
 let attractorBoundaryMargin = 50;
 let attractorCircleRadius = 40;
-let particleLimit = 20000;
+let particleLimit = 25000;
 let particleDestroyedCount = 0;
-let particleDestroyedThreshold = 2000;
+let particleDestroyedThreshold = 5000;
 let touchAttractor = null;
 let touchAttractionStrength = 0.1;
 
@@ -58,7 +58,7 @@ function draw() {
 
   // Create new particles in batches if the particle count is below the limit and the destroyed count exceeds the threshold
   if (particles.length < particleLimit && particles.length <= particleCountThreshold) {
-    for (let i = 0; i < particleDestroyedThreshold*2; i++) {
+    for (let i = 0; i < particleDestroyedThreshold*3; i++) {
       let angle = random(particleAngleMin, particleAngleMax);
       let velocity = random(particleVelocityMin, particleVelocityMax);
       angle += random(-particleAngleVariation, particleAngleVariation);
@@ -100,7 +100,7 @@ function draw() {
 
   // Display touch attractor as a transparent dot
   if (touchAttractor) {
-    strokeWeight(8);
+    strokeWeight(2);
     fill(0, 255, 0, 150); // Set the fill color to green with transparency (alpha value of 150)
     point(touchAttractor.x, touchAttractor.y);
   }
