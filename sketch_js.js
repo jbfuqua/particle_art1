@@ -71,12 +71,7 @@ function setup() {
     particles.push(new Particle(width * 0.5, height * 0.5, z, vel));
   }
 
-  // Create a CCapture instance
-  capturer = new CCapture({
-    format: 'webm',
-    framerate: 30,
-    verbose: true
-  });
+
 }
 
 function draw() {
