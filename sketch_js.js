@@ -1,10 +1,10 @@
 // ── Tunable parameters ──────────────────────────────────────────────
 // Atmosphere
-let bgColor = [3, 1, 5];              // deep space black
-let trailAlpha = 8;                    // very low = dense buildup like gas clouds
+let bgColor = [2, 1, 4];              // deep space black
+let trailAlpha = 12;                   // trail persistence
 
 // Particle population
-let particleCount = 8000;
+let particleCount = 4000;
 
 // Motion
 let particleVelocityMin = 0.6;
@@ -14,15 +14,15 @@ let particleAngleMax = 8;
 let particleAngleVariation = 0.01;
 let particleVelocityVariation = 0.3;
 let rotationalStrength = 0.008;
-let dragFactor = 1.0;                  // no drag — particles stay energetic
+let dragFactor = 1.0;
 
 // Depth (z-axis)
 let zMin = -100;
 let zMax = 100;
 
 // Forces
-let attractionStrength = 0.006;         // softer pull — particles spread more
-let repulsionStrength = 0.035;          // stronger push — breaks up clumps
+let attractionStrength = 0.006;
+let repulsionStrength = 0.035;
 let attractorAngleVariation = 0.01;
 let attractorBoundaryMargin = 50;
 let attractorCircleRadius = 40;
@@ -32,14 +32,36 @@ let touchAttractor = null;
 let touchAttractionStrength = 0.1;
 
 // Trail (per-particle history)
-let tailLength = 5;
+let tailLength = 8;
 
-// Noise-driven color
-let hueNoiseScale = 0.003;            // spatial scale of color regions
-let hueTimeSpeed = 0.0003;            // how fast colors drift over time
-let baseSaturation = 220;             // rich but not neon (0-255)
-let minBrightness = 120;
-let maxBrightness = 255;
+// ── Psychedelic palette (RGB) — blue dominant, fire accents ──
+const PALETTE = [
+  [0, 38, 255],      // deep electric blue
+  [0, 102, 255],     // bright blue
+  [0, 179, 255],     // cyan-blue
+  [0, 77, 230],      // dark blue
+  [255, 25, 0],      // hot red
+  [255, 128, 0],     // orange
+  [255, 230, 50],    // yellow-white burst
+  [255, 50, 0],      // red-orange
+  [50, 0, 204],      // violet
+  [0, 38, 255],      // back to deep blue (wraps)
+];
+
+function paletteColor(t) {
+  t = ((t % 1.0) + 1.0) % 1.0;
+  let idx = t * (PALETTE.length - 1);
+  let i = floor(idx);
+  let f = idx - i;
+  // Smoothstep for organic blending
+  f = f * f * (3 - 2 * f);
+  let a = PALETTE[i], b = PALETTE[min(i + 1, PALETTE.length - 1)];
+  return [
+    a[0] + (b[0] - a[0]) * f,
+    a[1] + (b[1] - a[1]) * f,
+    a[2] + (b[2] - a[2]) * f,
+  ];
+}
 
 // ── State ───────────────────────────────────────────────────────────
 let particles = [];
@@ -50,8 +72,8 @@ let recording = false;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  colorMode(HSB, 360, 255, 255, 255);
-  background(0);
+  colorMode(RGB, 255);
+  background(bgColor[0], bgColor[1], bgColor[2]);
 
   // Disable default touch behavior on mobile
   window.addEventListener('touchmove', function (event) {
@@ -92,12 +114,10 @@ function setup() {
 }
 
 function draw() {
-  // Semi-transparent background overlay — particles accumulate into dense clouds
+  // Semi-transparent background overlay — creates trail persistence
   noStroke();
-  colorMode(RGB, 255);
   fill(bgColor[0], bgColor[1], bgColor[2], trailAlpha);
   rect(0, 0, width, height);
-  colorMode(HSB, 360, 255, 255, 255);
 
   // Update & draw particles
   for (let particle of particles) {
@@ -157,7 +177,7 @@ function moveNearestAttractor(x, y) {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  background(0);
+  background(bgColor[0], bgColor[1], bgColor[2]);
 }
 
 // ── Particle class ──────────────────────────────────────────────────
@@ -168,7 +188,6 @@ class Particle {
     this.acc = createVector();
     this.history = [];
     this.depthFactor = map(z, zMin, zMax, 0, 1);
-    // Per-particle noise offset so they don't all share the same color
     this.noiseOffset = random(1000);
   }
 
@@ -204,7 +223,7 @@ class Particle {
     rotationalForce.mult(rotationalStrength);
     this.acc.add(rotationalForce);
 
-    // Gentle gravity toward center — stronger the further out, keeps composition framed
+    // Gentle gravity toward center
     let toCenter = createVector(width * 0.5 - this.pos.x, height * 0.5 - this.pos.y);
     let distFromCenter = toCenter.mag();
     let maxDist = dist(0, 0, width * 0.5, height * 0.5);
@@ -227,43 +246,42 @@ class Particle {
   }
 
   display() {
-    let d = this.depthFactor; // 0 = far (small, dim), 1 = close (large, bright)
+    let d = this.depthFactor; // 0 = far, 1 = close
 
-    // Drifting radial hue gradient — origin orbits, rotation shifts over time
+    // ── Hallucinatory color field — overlapping waves ──
+    let px = this.pos.x / width;
+    let py = this.pos.y / height;
     let t = frameCount * 0.001;
-    let originX = width * 0.5 + cos(t * 0.7) * width * 0.15;
-    let originY = height * 0.5 + sin(t * 0.5) * height * 0.15;
-    let cx = this.pos.x - originX;
-    let cy = this.pos.y - originY;
-    let angleFromCenter = atan2(cy, cx);
-    let hueRotation = t * 30; // whole palette rotates over time
-    let baseHue = map(angleFromCenter, -PI, PI, 0, 360) + hueRotation;
-    // Noise adds organic variation on top
-    let n = noise(
-      this.pos.x * hueNoiseScale + this.noiseOffset,
-      this.pos.y * hueNoiseScale,
-      frameCount * hueTimeSpeed
-    );
-    let hue = (baseHue + n * 120 - 60) % 360;
-    if (hue < 0) hue += 360;
 
-    // Closer particles (high z) are larger and brighter
-    let baseSize = map(d, 0, 1, 0.5, 4.0);
-    let bri = map(d, 0, 1, minBrightness, maxBrightness);
-    let alpha = map(d, 0, 1, 60, 220);
+    let wave1 = sin(px * 12.0 + t * 30) * 0.5 + 0.5;
+    let wave2 = sin(py * 15.0 - t * 20 + px * 9.0) * 0.5 + 0.5;
+    let wave3 = sin((px + py) * 10.0 + t * 15) * 0.5 + 0.5;
+    let wave4 = sin(atan2(py - 0.5, px - 0.5) * 3.0 +
+                sqrt((px-0.5)*(px-0.5) + (py-0.5)*(py-0.5)) * 18.0 -
+                t * 40) * 0.5 + 0.5;
 
-    // Saturation/brightness pulse — each particle pulses at its own phase
+    let hueT = (wave1 * 0.3 + wave2 * 0.25 + wave3 * 0.2 + wave4 * 0.25 +
+                this.noiseOffset * 0.00005) % 1.0;
+    let [cr, cg, cb] = paletteColor(hueT);
+
+    // Depth-based size and alpha
+    let baseSize = map(d, 0, 1, 0.5, 3.5);
+    let alpha = map(d, 0, 1, 40, 180);
+
+    // Per-particle pulse
     let pulse = sin(frameCount * 0.02 + this.noiseOffset * 6.0);
-    let satPulse = baseSaturation * map(pulse, -1, 1, 0.6, 1.0);
-    let briPulse = bri * map(pulse, -1, 1, 0.7, 1.0);
+    let briPulse = map(pulse, -1, 1, 0.7, 1.0);
+    cr *= briPulse;
+    cg *= briPulse;
+    cb *= briPulse;
 
     // ── Draw trail ──
     if (this.history.length > 1) {
       for (let i = 0; i < this.history.length - 1; i++) {
-        let t = i / (this.history.length - 1);
-        let trailA = alpha * t * 0.4;
-        let trailSize = baseSize * (0.3 + 0.7 * t);
-        stroke(hue, satPulse, briPulse, trailA);
+        let segT = i / (this.history.length - 1);
+        let trailA = alpha * segT * segT * 0.35;
+        let trailSize = baseSize * (0.3 + 0.7 * segT);
+        stroke(cr, cg, cb, trailA);
         strokeWeight(trailSize);
         let p1 = this.history[i];
         let p2 = this.history[i + 1];
@@ -271,14 +289,14 @@ class Particle {
       }
     }
 
-    // ── Soft glow — scales with particle size ──
+    // ── Soft glow ──
     noStroke();
-    let glowSize = baseSize * 3;
-    fill(hue, satPulse, briPulse, alpha * 0.03);
+    let glowSize = baseSize * 3.5;
+    fill(cr, cg, cb, alpha * 0.025);
     ellipse(this.pos.x, this.pos.y, glowSize, glowSize);
 
     // ── Core point ──
-    stroke(hue, satPulse * 0.5, briPulse, alpha);
+    stroke(cr, cg, cb, alpha);
     strokeWeight(baseSize);
     point(this.pos.x, this.pos.y);
   }
